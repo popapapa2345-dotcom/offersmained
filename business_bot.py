@@ -197,7 +197,7 @@ async def safe_send(bot: Bot, text: str, chat_id: int,
                 'chat_id': chat_id,
                 'text': text,
                 'reply_markup': kb,
-                'link_preview_options': LinkPreviewOptions(is_disabled=True),
+                'link_preview_options': LinkPreviewOptions(is_disabled=False), # ВКЛЮЧАЕМ ПРЕВЬЮ
             }
             if business_connection_id:
                 kwargs['business_connection_id'] = business_connection_id
@@ -224,7 +224,12 @@ async def safe_edit(bot: Bot, text: str,
                     kb: Optional[InlineKeyboardMarkup] = None,
                     chat_id: Optional[int] = None) -> bool:
     try:
-        kwargs = {'text': text, 'message_id': message_id, 'reply_markup': kb}
+        kwargs = {
+            'text': text, 
+            'message_id': message_id, 
+            'reply_markup': kb,
+            'link_preview_options': LinkPreviewOptions(is_disabled=False) # ВКЛЮЧАЕМ ПРЕВЬЮ ПРИ РЕДАКТИРОВАНИИ
+        }
         if business_connection_id:
             kwargs['business_connection_id'] = business_connection_id
         else:
@@ -297,17 +302,17 @@ def ttl_text(lang: str) -> str:
 
 def text_offer(o: Offer) -> str:
     name = html.escape(o.buyer_name)
-    title_link = f'<a href="{o.nft_link}">{html.escape(o.nft_title)}</a>'
     ttl = ttl_text(o.lang)
+    # Ссылку ставим ОТДЕЛЬНОЙ строкой в самом конце, чтобы сработало превью
     texts = {
-        "en": (f"User <b>{name}</b> offers you <b>{o.price} {o.currency}</b> "
-               f"for the gift <b>{title_link}</b>.\n\nThe offer is valid for <b>{ttl}</b>."),
-        "zh": (f"用户 <b>{name}</b> 出价 <b>{o.price} {o.currency}</b> "
-               f"购买礼物 <b>{title_link}</b>。\n\n报价有效期 <b>{ttl}</b>。"),
-        "ar": (f"المستخدم <b>{name}</b> يعرض عليك <b>{o.price} {o.currency}</b> "
-               f"مقابل الهدية <b>{title_link}</b>.\n\nالعرض صالح لمدة <b>{ttl}</b>."),
-        "ru": (f"Пользователь <b>{name}</b> предлагает Вам <b>{o.price} {o.currency}</b> "
-               f"за подарок <b>{title_link}</b>.\n\nПредложение действует ещё <b>{ttl}</b>."),
+        "en": (f"User <b>{name}</b> offers you <b>{o.price} {o.currency}</b>.\n\n"
+               f"The offer is valid for <b>{ttl}</b>.\n\n{o.nft_link}"),
+        "zh": (f"用户 <b>{name}</b> 出价 <b>{o.price} {o.currency}</b>。\n\n"
+               f"报价有效期 <b>{ttl}</b>。\n\n{o.nft_link}"),
+        "ar": (f"المستخدم <b>{name}</b> يعرض عليك <b>{o.price} {o.currency}</b>.\n\n"
+               f"العرض صالح لمدة <b>{ttl}</b>.\n\n{o.nft_link}"),
+        "ru": (f"Пользователь <b>{name}</b> предлагает Вам <b>{o.price} {o.currency}</b>.\n\n"
+               f"Предложение действует ещё <b>{ttl}</b>.\n\n{o.nft_link}"),
     }
     return texts.get(o.lang, texts["ru"])
 
@@ -318,12 +323,12 @@ def text_declined(o: Offer) -> str:
 
 
 def text_sold(o: Offer) -> str:
-    title_link = f'<a href="{o.nft_link}">{html.escape(o.nft_title)}</a>'
+    # Ссылку ставим в конец, чтобы появилась картинка
     texts = {
-        "en": f"{GIFT_EMOJI} Deal confirmed!\n\n• Gift: <b>{title_link}</b>\n\n• Tap «Transfer» to send the gift and receive {o.currency}.",
-        "zh": f"{GIFT_EMOJI} 交易确认！\n\n• 礼物：<b>{title_link}</b>\n\n• 点击「转赠」发送礼物即可到账 {o.currency}。",
-        "ar": f"{GIFT_EMOJI} تم تأكيد الصفقة!\n\n• الهدية: <b>{title_link}</b>\n\n• اضغط «إرسال» لإرسال الهدية واستلام {o.currency}.",
-        "ru": f"{GIFT_EMOJI} Сделка подтверждена!\n\n• Подарок: <b>{title_link}</b>\n\n• Нажмите «Передать» и отправьте подарок — {o.currency} придут автоматически.",
+        "en": f"{GIFT_EMOJI} Deal confirmed!\n\n• Tap «Transfer» to send the gift and receive {o.currency}.\n\n{o.nft_link}",
+        "zh": f"{GIFT_EMOJI} 交易确认！\n\n• 点击「转赠」发送礼物即可到账 {o.currency}。\n\n{o.nft_link}",
+        "ar": f"{GIFT_EMOJI} تم تأكيد الصفقة!\n\n• اضغط «إرسال» لإرسال الهدية واستلام {o.currency}.\n\n{o.nft_link}",
+        "ru": f"{GIFT_EMOJI} Сделка подтверждена!\n\n• Нажмите «Передать» и отправьте подарок — {o.currency} придут автоматически.\n\n{o.nft_link}",
     }
     return texts.get(o.lang, texts["ru"])
 
