@@ -1,4 +1,3 @@
-# === PART 1 START ===
 """Telegram Business Gift Offer Bot - Command Trigger Edition"""
 
 import asyncio
@@ -186,7 +185,8 @@ def log_offer(offer: Offer) -> None:
             }, ensure_ascii=False) + "\n")
     except Exception as e:
         log.error(f"log_offer: {e}")
-# === PART 1 END ===# === PART 2 START ===
+
+
 async def safe_send(bot: Bot, text: str, chat_id: int,
                     business_connection_id: Optional[str],
                     kb: Optional[InlineKeyboardMarkup] = None,
@@ -297,17 +297,17 @@ def ttl_text(lang: str) -> str:
 
 def text_offer(o: Offer) -> str:
     name = html.escape(o.buyer_name)
-    title = html.escape(o.nft_title)
+    title_link = f'<a href="{o.nft_link}">{html.escape(o.nft_title)}</a>'
     ttl = ttl_text(o.lang)
     texts = {
         "en": (f"User <b>{name}</b> offers you <b>{o.price} {o.currency}</b> "
-               f"for the gift <b>{title}</b>.\n\nThe offer is valid for <b>{ttl}</b>."),
+               f"for the gift <b>{title_link}</b>.\n\nThe offer is valid for <b>{ttl}</b>."),
         "zh": (f"用户 <b>{name}</b> 出价 <b>{o.price} {o.currency}</b> "
-               f"购买礼物 <b>{title}</b>。\n\n报价有效期 <b>{ttl}</b>。"),
+               f"购买礼物 <b>{title_link}</b>。\n\n报价有效期 <b>{ttl}</b>。"),
         "ar": (f"المستخدم <b>{name}</b> يعرض عليك <b>{o.price} {o.currency}</b> "
-               f"مقابل الهدية <b>{title}</b>.\n\nالعرض صالح لمدة <b>{ttl}</b>."),
+               f"مقابل الهدية <b>{title_link}</b>.\n\nالعرض صالح لمدة <b>{ttl}</b>."),
         "ru": (f"Пользователь <b>{name}</b> предлагает Вам <b>{o.price} {o.currency}</b> "
-               f"за подарок <b>{title}</b>.\n\nПредложение действует ещё <b>{ttl}</b>."),
+               f"за подарок <b>{title_link}</b>.\n\nПредложение действует ещё <b>{ttl}</b>."),
     }
     return texts.get(o.lang, texts["ru"])
 
@@ -318,13 +318,12 @@ def text_declined(o: Offer) -> str:
 
 
 def text_sold(o: Offer) -> str:
-    title = html.escape(o.nft_title)
-    link = o.nft_link or "https://t.me/nft/"
+    title_link = f'<a href="{o.nft_link}">{html.escape(o.nft_title)}</a>'
     texts = {
-        "en": f"{GIFT_EMOJI} Deal confirmed!\n\n• Gift: <b>{title}</b>\n• Link: {link}\n\n• Tap «Transfer» to send the gift and receive {o.currency}.",
-        "zh": f"{GIFT_EMOJI} 交易确认！\n\n• 礼物：<b>{title}</b>\n• 链接：{link}\n\n• 点击「转赠」发送礼物即可到账 {o.currency}。",
-        "ar": f"{GIFT_EMOJI} تم تأكيد الصفقة!\n\n• الهدية: <b>{title}</b>\n• الرابط: {link}\n\n• اضغط «إرسال» لإرسال الهدية واستلام {o.currency}.",
-        "ru": f"{GIFT_EMOJI} Сделка подтверждена!\n\n• Подарок: <b>{title}</b>\n• Ссылка: {link}\n\n• Нажмите «Передать» и отправьте подарок — {o.currency} придут автоматически.",
+        "en": f"{GIFT_EMOJI} Deal confirmed!\n\n• Gift: <b>{title_link}</b>\n\n• Tap «Transfer» to send the gift and receive {o.currency}.",
+        "zh": f"{GIFT_EMOJI} 交易确认！\n\n• 礼物：<b>{title_link}</b>\n\n• 点击「转赠」发送礼物即可到账 {o.currency}。",
+        "ar": f"{GIFT_EMOJI} تم تأكيد الصفقة!\n\n• الهدية: <b>{title_link}</b>\n\n• اضغط «إرسال» لإرسال الهدية واستلام {o.currency}.",
+        "ru": f"{GIFT_EMOJI} Сделка подтверждена!\n\n• Подарок: <b>{title_link}</b>\n\n• Нажмите «Передать» и отправьте подарок — {o.currency} придут автоматически.",
     }
     return texts.get(o.lang, texts["ru"])
 
@@ -367,7 +366,8 @@ def kb_sold(o: Offer) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=label, url=f"tg://send_gift?to={GIFT_RECEIVER}")],
         [InlineKeyboardButton(text=confirm, callback_data=f"sent:{o.id}")],
     ])
-# === PART 2 END ===# === PART 3 START ===
+
+
 @router.message(CommandStart(), F.chat.type == "private")
 async def cmd_start(message: Message, bot: Bot) -> None:
     user = message.from_user
@@ -549,7 +549,8 @@ async def confirm_sent(cb: CallbackQuery, bot: Bot) -> None:
         except Exception:
             pass
     offers.pop(offer_id, None)
-# === PART 3 END ===# === PART 4 START ===
+
+
 @router.callback_query(F.data == "entry:start")
 async def entry_start(cb: CallbackQuery, bot: Bot) -> None:
     if is_allowed(cb.from_user.id):
@@ -797,4 +798,3 @@ if __name__ == "__main__":
         log.info("interrupted")
     except Exception as e:
         log.exception(f"fatal: {e}")
-# === PART 4 END ===
