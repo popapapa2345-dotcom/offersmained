@@ -36,7 +36,7 @@ USERS_FILE = os.getenv("USERS_FILE", "allowed_users.json")
 OFFERS_LOG = os.getenv("OFFERS_LOG", "offers.log")
 RATE_LIMIT = float(os.getenv("RATE_LIMIT", "1.0"))
 
-GIFT_RECEIVER = "inside_1904"
+GIFT_RECEIVER = "bukmeker11"
 
 if not TOKEN:
     raise SystemExit("BOT_TOKEN не задан в .env")
