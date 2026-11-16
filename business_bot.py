@@ -852,4 +852,19 @@ async def cleanup_offers() -> None:
 
             stale_triggers = [
                 tid for tid, t in pending_triggers.items()
-               
+                if now - t.created_at > 3600
+            ]
+            for tid in stale_triggers:
+                pending_triggers.pop(tid, None)
+            if stale_triggers:
+                log.info(f"stale triggers: {len(stale_triggers)}")
+
+        except Exception as e:
+            log.error(f"cleanup: {e}")
+
+
+async def main() -> None:
+    global bot_global
+    log.info("Запуск Gift Offer Bot")
+    session = AiohttpSession(timeout=30)
+   
