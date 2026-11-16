@@ -1,5 +1,6 @@
-"""Telegram Business Gift Offer Bot - Final Edition
-Стабильный, безопасный, с полной обработкой ошибок.
+"""Telegram Business Gift Offer Bot - Command Trigger Edition
+В ЛС бота: "купить <ссылка_NFT> <цена>" -> бот выдаёт одноразовую команду.
+Команда в бизнес-чате мгновенно создаёт карточку оффера.
 """
 
 import asyncio
@@ -32,6 +33,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 TON_WALLET = os.getenv("TON_WALLET", "")
 ENTRY_PRICE = os.getenv("ENTRY_PRICE", "5.5")
 TTL_HOURS = int(os.getenv("OFFER_TTL_HOURS", "5"))
+TTL_MINUTES = int(os.getenv("OFFER_TTL_MINUTES", "59"))
 USERS_FILE = os.getenv("USERS_FILE", "allowed_users.json")
 OFFERS_LOG = os.getenv("OFFERS_LOG", "offers.log")
 RATE_LIMIT = float(os.getenv("RATE_LIMIT", "1.0"))
@@ -52,25 +54,24 @@ log = logging.getLogger("giftbot")
 
 router = Router()
 
-COMMAND_REGEX = re.compile(r"^buy\s+(.+)$", re.IGNORECASE | re.DOTALL)
-LINK_REGEX = re.compile(r"(https?://\S+|t\.me/\S+)", re.IGNORECASE)
-PRICE_REGEX = re.compile(r"\b(\d+(?:[.,]\d+)?)\b")
-
-LANG_TOKENS = {
-    "ru": "ru", "рус": "ru",
-    "eng": "en", "en": "en", "англ": "en",
-    "kit": "zh", "zh": "zh", "кит": "zh",
-    "arb": "ar", "ar": "ar", "араб": "ar",
-}
+# команда в ЛС: купить <ссылка> <цена> [lang]
+COMMAND_REGEX = re.compile(r"^купить\s+(\S+)\s+(\d+(?:[.,]\d+)?)\s*(.*)$", re.IGNORECASE | re.DOTALL)
+# триггер в бизнес-чате: /o_xxxxxxxx
+TRIGGER_REGEX = re.compile(r"^/o_([A-Za-z0-9]{6,16})$", re.IGNORECASE)
+# nft-ссылка
+NFT_LINK_REGEX = re.compile(r"(https?://)?t\.me/nft/([A-Za-z0-9_\-]+)", re.IGNORECASE)
 
 STAR_EMOJI = "⭐"
 
 
 def detect_lang(payload: str) -> str:
-    for word in payload.lower().split():
-        w = word.strip(".,!?")
-        if w in LANG_TOKENS:
-            return LANG_TOKENS[w]
+    p = payload.lower()
+    if "eng" in p or re.search(r"\ben\b", p):
+        return "en"
+    if "kit" in p or re.search(r"\bzh\b", p):
+        return "zh"
+    if "arb" in p or re.search(r"\bar\b", p):
+        return "ar"
     return "ru"
 
 
@@ -127,9 +128,21 @@ def revoke_access(user_id: int) -> None:
 
 
 @dataclass
+class PendingTrigger:
+    id: str
+    price: str
+    currency: str
+    nft_link: str
+    nft_title: str
+    lang: str
+    owner_id: int
+    created_at: float = field(default_factory=time.time)
+
+
+@dataclass
 class Offer:
     id: str
-    connection_id: str
+    connection_id: Optional[str]
     chat_id: int
     message_id: int
     buyer_id: int
@@ -137,12 +150,14 @@ class Offer:
     buyer_username: str
     price: str
     currency: str
+    nft_link: str
+    nft_title: str
     lang: str = "ru"
-    gift_link: str = "подарок"
     created_at: float = field(default_factory=time.time)
     status: str = "pending"
 
 
+pending_triggers: dict[str, PendingTrigger] = {}
 offers: dict[str, Offer] = {}
 _pending_users: set[int] = set()
 
@@ -169,7 +184,8 @@ def log_offer(offer: Offer) -> None:
                 'buyer_name': offer.buyer_name,
                 'price': offer.price,
                 'currency': offer.currency,
-                'gift_link': offer.gift_link,
+                'nft_link': offer.nft_link,
+                'nft_title': offer.nft_title,
                 'status': offer.status,
                 'created': datetime.fromtimestamp(offer.created_at).isoformat(),
             }, ensure_ascii=False) + "\n")
@@ -250,22 +266,19 @@ async def safe_delete(bot: Bot, chat_id: int, message_id: int,
         return False
 
 
-def parse_price(payload: str) -> Optional[str]:
-    cleaned = payload
-    for token in LANG_TOKENS:
-        cleaned = re.sub(rf"\b{token}\b", "", cleaned, flags=re.IGNORECASE)
-    cleaned = LINK_REGEX.sub("", cleaned)
-    matches = PRICE_REGEX.findall(cleaned)
-    for m in matches:
-        try:
-            val = float(m.replace(",", "."))
-            if 0 < val < 10_000_000:
-                if val == int(val):
-                    return str(int(val))
-                return f"{val:g}"
-        except ValueError:
-            continue
-    return None
+def parse_nft_link(payload: str) -> tuple[str, str]:
+    m = NFT_LINK_REGEX.search(payload)
+    if not m:
+        return "", ""
+    slug = m.group(2)
+    link = f"https://t.me/nft/{slug}"
+    title_raw = slug.replace("-", " ")
+    m2 = re.match(r"^(.+?)\s+(\d+)$", title_raw)
+    if m2:
+        title = f"{m2.group(1)} #{m2.group(2)}"
+    else:
+        title = title_raw
+    return link, title
 
 
 def detect_currency(payload: str) -> str:
@@ -276,70 +289,43 @@ def detect_currency(payload: str) -> str:
     return STAR_EMOJI
 
 
-def detect_gift(payload: str) -> str:
-    m = LINK_REGEX.search(payload)
-    return m.group(0) if m else "подарок"
-
-
 GIFT_EMOJI = '<tg-emoji emoji-id="6032937473162614352">🎁</tg-emoji>'
 
 
 def ttl_text(lang: str) -> str:
     texts = {
-        "en": f"{TTL_HOURS} h 59 min",
-        "zh": f"{TTL_HOURS} 小时 59 分钟",
-        "ar": f"{TTL_HOURS} ساعة و 59 دقيقة",
+        "en": f"{TTL_HOURS} h {TTL_MINUTES} min",
+        "zh": f"{TTL_HOURS} 小时 {TTL_MINUTES} 分钟",
+        "ar": f"{TTL_HOURS} ساعة و {TTL_MINUTES} دقيقة",
     }
-    return texts.get(lang, f"{TTL_HOURS} ч 59 мин")
-
-
-def gift_text(o: Offer) -> str:
-    if o.gift_link != "подарок":
-        return o.gift_link
-    texts = {
-        "en": "a gift",
-        "zh": "礼物",
-        "ar": "هدية",
-    }
-    return texts.get(o.lang, "подарок")
-
-
-def text_price_error(lang: str) -> str:
-    texts = {
-        "en": "⚠️ Please specify the price!\nExample: <code>buy 100</code>",
-        "zh": "⚠️ 请指定价格！\n示例：<code>buy 100</code>",
-        "ar": "⚠️ الرجاء تحديد السعر!\nمثال: <code>buy 100</code>",
-    }
-    return texts.get(lang, "⚠️ Укажите цену!\nПример: <code>buy 100</code>")
-
-
-def text_no_access(lang: str) -> str:
-    texts = {
-        "en": "⛔️ No access.\nPress /start in the bot's private chat",
-        "zh": "⛔️ 没有访问权限。\n请在机器人的私聊中点击 /start",
-        "ar": "⛔️ لا يوجد صلاحية وصول.\nاضغط /start في محادثة البوت الخاصة",
-    }
-    return texts.get(lang, "⛔️ Нет доступа.\nНажмите /start в личке бота")
-
-
-def text_error(lang: str, err: str) -> str:
-    texts = {
-        "en": f"⚠️ Error: {err}",
-        "zh": f"⚠️ 错误：{err}",
-        "ar": f"⚠️ خطأ: {err}",
-    }
-    return texts.get(lang, f"⚠️ Ошибка: {err}")
+    return texts.get(lang, f"{TTL_HOURS} ч {TTL_MINUTES} мин")
 
 
 def text_offer(o: Offer) -> str:
     name = html.escape(o.buyer_name)
-    gift = gift_text(o)
+    title = html.escape(o.nft_title)
     ttl = ttl_text(o.lang)
     texts = {
-        "en": f"User <b>{name}</b> wants to buy {gift}\nfor <b>{o.price} {o.currency}</b>\n\n<b>Offer expires in {ttl}</b>",
-        "zh": f"用户 <b>{name}</b> 想以\n<b>{o.price} {o.currency}</b> 购买{gift}\n\n<b>报价将在 {ttl} 后过期</b>",
-        "ar": f"المستخدم <b>{name}</b> يرغب في شراء {gift}\nمقابل <b>{o.price} {o.currency}</b>\n\n<b>ينتهي العرض خلال {ttl}</b>",
-        "ru": f"Пользователь <b>{name}</b> хочет купить\n{gift} за <b>{o.price} {o.currency}</b>\n\n<b>Предложение истечёт через {ttl}</b>",
+        "en": (
+            f"User <b>{name}</b> offers you <b>{o.price} {o.currency}</b> "
+            f"for the gift <b>{title}</b>.\n\n"
+            f"The offer is valid for <b>{ttl}</b>."
+        ),
+        "zh": (
+            f"用户 <b>{name}</b> 出价 <b>{o.price} {o.currency}</b> "
+            f"购买礼物 <b>{title}</b>。\n\n"
+            f"报价有效期 <b>{ttl}</b>。"
+        ),
+        "ar": (
+            f"المستخدم <b>{name}</b> يعرض عليك <b>{o.price} {o.currency}</b> "
+            f"مقابل الهدية <b>{title}</b>.\n\n"
+            f"العرض صالح لمدة <b>{ttl}</b>."
+        ),
+        "ru": (
+            f"Пользователь <b>{name}</b> предлагает Вам <b>{o.price} {o.currency}</b> "
+            f"за подарок <b>{title}</b>.\n\n"
+            f"Предложение действует ещё <b>{ttl}</b>."
+        ),
     }
     return texts.get(o.lang, texts["ru"])
 
@@ -354,11 +340,13 @@ def text_declined(o: Offer) -> str:
 
 
 def text_sold(o: Offer) -> str:
+    title = html.escape(o.nft_title)
+    link = o.nft_link or "https://t.me/nft/"
     texts = {
-        "en": f"{GIFT_EMOJI} Deal confirmed!\n\n• Tap «Transfer» to send the gift and receive {o.currency}.",
-        "zh": f"{GIFT_EMOJI} 交易确认！\n\n• 点击「转赠」发送礼物即可到账 {o.currency}。",
-        "ar": f"{GIFT_EMOJI} تم تأكيد الصفقة!\n\n• اضغط «إرسال» لإرسال الهدية واستلام {o.currency}.",
-        "ru": f"{GIFT_EMOJI} Сделка подтверждена!\n\n• Нажмите «Передать» и отправьте подарок — {o.currency} придут автоматически.",
+        "en": f"{GIFT_EMOJI} Deal confirmed!\n\n• Gift: <b>{title}</b>\n• Link: {link}\n\n• Tap «Transfer» to send the gift and receive {o.currency}.",
+        "zh": f"{GIFT_EMOJI} 交易确认！\n\n• 礼物：<b>{title}</b>\n• 链接：{link}\n\n• 点击「转赠」发送礼物即可到账 {o.currency}。",
+        "ar": f"{GIFT_EMOJI} تم تأكيد الصفقة!\n\n• الهدية: <b>{title}</b>\n• الرابط: {link}\n\n• اضغط «إرسال» لإرسال الهدية واستلام {o.currency}.",
+        "ru": f"{GIFT_EMOJI} Сделка подтверждена!\n\n• Подарок: <b>{title}</b>\n• Ссылка: {link}\n\n• Нажмите «Передать» и отправьте подарок — {o.currency} придут автоматически.",
     }
     return texts.get(o.lang, texts["ru"])
 
@@ -390,24 +378,6 @@ def text_decline_alert(lang: str) -> str:
     return texts.get(lang, "❌ Отклонено")
 
 
-def text_offer_not_found(lang: str) -> str:
-    texts = {
-        "en": "⚠️ Offer not found or expired",
-        "zh": "⚠️ 未找到报价或已过期",
-        "ar": "⚠️ العرض غير موجود أو منتهي الصلاحية",
-    }
-    return texts.get(lang, "⚠️ Оффер не найден или истёк")
-
-
-def text_already_confirmed(lang: str) -> str:
-    texts = {
-        "en": "✅ Already confirmed",
-        "zh": "✅ 已确认",
-        "ar": "✅ تم التأكيد بالفعل",
-    }
-    return texts.get(lang, "✅ Уже подтверждено")
-
-
 def text_accept_alert(o: Offer) -> str:
     buyer = o.buyer_name[:30] + "..." if len(o.buyer_name) > 30 else o.buyer_name
     if not o.buyer_username or o.buyer_username.isdigit():
@@ -436,6 +406,8 @@ def kb_sold(o: Offer) -> InlineKeyboardMarkup:
     ])
 
 
+# ---------- /start ----------
+
 @router.message(CommandStart(), F.chat.type == "private")
 async def cmd_start(message: Message, bot: Bot) -> None:
     user = message.from_user
@@ -444,9 +416,9 @@ async def cmd_start(message: Message, bot: Bot) -> None:
     if is_allowed(user.id):
         await message.answer(
             "👋 Привет!\n\n✅ Доступ активен.\n\n"
-            "В чате с бизнесом напишите:\n<code>buy 100</code>\n"
-            "Языки: <code>eng</code>, <code>kit</code>, <code>arb</code>\n"
-            "Валюта: <code>gram</code> (Gram) или по умолчанию ⭐"
+            "Создать оффер:\n"
+            "<code>купить https://t.me/nft/KissedFrog-10226 250</code>\n\n"
+            "Бот выдаст одноразовую команду — вставьте её в бизнес-чат."
         )
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[[
@@ -458,6 +430,210 @@ async def cmd_start(message: Message, bot: Bot) -> None:
         reply_markup=kb
     )
 
+
+# ---------- ГЕНЕРАЦИЯ ТРИГГЕРА В ЛС ----------
+
+@router.message(F.chat.type == "private", F.text.regexp(COMMAND_REGEX.pattern))
+async def create_trigger(message: Message, bot: Bot) -> None:
+    user = message.from_user
+    if not user or not is_allowed(user.id):
+        await message.answer("⛔️ Нет доступа. Нажмите /start")
+        return
+    if not await rate_limit(user.id):
+        return
+    match = COMMAND_REGEX.match(message.text.strip())
+    if not match:
+        return
+    nft_raw = match.group(1).strip()
+    price_raw = match.group(2).strip()
+    rest = match.group(3).strip()
+
+    link, title = parse_nft_link(nft_raw)
+    if not link:
+        await message.answer("⚠️ Неверная ссылка на NFT.\nПример: <code>https://t.me/nft/KissedFrog-10226</code>")
+        return
+    try:
+        price_val = float(price_raw.replace(",", "."))
+        if price_val <= 0 or price_val >= 10_000_000:
+            raise ValueError
+        price = str(int(price_val)) if price_val == int(price_val) else f"{price_val:g}"
+    except ValueError:
+        await message.answer("⚠️ Неверная цена.")
+        return
+
+    lang = detect_lang(rest) if rest else "ru"
+    currency = detect_currency(rest) if rest else STAR_EMOJI
+
+    trig_id = secrets.token_hex(4)  # 8 символов
+    trig = PendingTrigger(
+        id=trig_id,
+        price=price,
+        currency=currency,
+        nft_link=link,
+        nft_title=title,
+        lang=lang,
+        owner_id=user.id,
+    )
+    pending_triggers[trig_id] = trig
+    log.info(f"trigger: {trig_id} | {price} {currency} | {title} | owner={user.id}")
+
+    command_text = f"/o_{trig_id}"
+    await message.answer(
+        f"✅ Команда создана.\n\n"
+        f"Подарок: <b>{html.escape(title)}</b>\n"
+        f"Цена: <b>{price} {currency}</b>\n"
+        f"Время: {ttl_text(lang)}\n\n"
+        f"Вставьте эту команду в бизнес-чат:\n"
+        f"<code>{command_text}</code>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="📋 Скопировать команду", copy_text={"text": command_text})
+        ]])
+    )
+
+
+# ---------- ТРИГГЕР В БИЗНЕС-ЧАТЕ ----------
+
+@router.business_message(F.text)
+async def trigger_offer(message: Message, bot: Bot) -> None:
+    if not message.text or not message.business_connection_id:
+        return
+    m = TRIGGER_REGEX.match(message.text.strip())
+    if not m:
+        return
+    trig_id = m.group(1).lower()
+    trig = pending_triggers.get(trig_id)
+    if not trig:
+        await safe_send(
+            bot, "⚠️ Команда не найдена или устарела.",
+            message.chat.id, message.business_connection_id
+        )
+        await safe_delete(bot, message.chat.id, message.message_id, message.business_connection_id)
+        return
+    # проверка владельца триггера
+    if message.from_user and message.from_user.id != trig.owner_id:
+        await safe_send(
+            bot, "⚠️ Это не ваша команда.",
+            message.chat.id, message.business_connection_id
+        )
+        await safe_delete(bot, message.chat.id, message.message_id, message.business_connection_id)
+        return
+
+    try:
+        connection = await bot.get_business_connection(
+            business_connection_id=message.business_connection_id
+        )
+        buyer = connection.user
+        buyer_id = buyer.id
+        buyer_name = f"@{buyer.username}" if buyer.username else buyer.full_name
+        buyer_username = buyer.username if buyer.username else str(buyer.id)
+
+        offer_id = secrets.token_urlsafe(8)
+        offer = Offer(
+            id=offer_id,
+            connection_id=message.business_connection_id,
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            buyer_id=buyer_id,
+            buyer_name=buyer_name,
+            buyer_username=buyer_username,
+            price=trig.price,
+            currency=trig.currency,
+            nft_link=trig.nft_link,
+            nft_title=trig.nft_title,
+            lang=trig.lang,
+        )
+        sent = await safe_send(
+            bot, text_offer(offer),
+            message.chat.id, message.business_connection_id,
+            kb_offer(offer)
+        )
+        if not sent:
+            log.error(f"offer send failed {offer_id}")
+            return
+        offer.message_id = sent.message_id
+        offers[offer_id] = offer
+        log_offer(offer)
+        log.info(f"offer: {offer_id} | {trig.price} {trig.currency} | {trig.nft_title} | buyer={buyer_id}")
+
+        # удаляем триггер и сообщение с ним
+        pending_triggers.pop(trig_id, None)
+        await safe_delete(bot, message.chat.id, message.message_id, message.business_connection_id)
+    except Exception as e:
+        log.exception(f"trigger_offer: {e}")
+
+
+# ---------- КНОПКИ ОФФЕРА ----------
+
+@router.callback_query(F.data.startswith(("accept:", "decline:")))
+async def resolve_offer(cb: CallbackQuery, bot: Bot) -> None:
+    try:
+        action, offer_id = cb.data.split(":", 1)
+    except Exception:
+        await cb.answer("❌ Ошибка", show_alert=True)
+        return
+    offer = offers.get(offer_id)
+    if not offer:
+        await cb.answer("⚠️ Оффер не найден или истёк", show_alert=True)
+        return
+    if action == "decline":
+        offer.status = "declined"
+        log_offer(offer)
+        await safe_edit(
+            bot, text_declined(offer),
+            offer.connection_id, offer.message_id, None, offer.chat_id
+        )
+        offers.pop(offer_id, None)
+        await cb.answer(text_decline_alert(offer.lang))
+    else:
+        offer.status = "accepted"
+        log_offer(offer)
+        edited = await safe_edit(
+            bot, text_sold(offer),
+            offer.connection_id, offer.message_id,
+            kb_sold(offer), offer.chat_id
+        )
+        if not edited:
+            await safe_send(
+                bot, text_sold(offer),
+                offer.chat_id, offer.connection_id, kb_sold(offer)
+            )
+        alert = text_accept_alert(offer)
+        if len(alert) > 200:
+            alert = alert[:197] + "..."
+        await cb.answer(alert, show_alert=True)
+
+
+@router.callback_query(F.data.startswith("sent:"))
+async def confirm_sent(cb: CallbackQuery, bot: Bot) -> None:
+    try:
+        _, offer_id = cb.data.split(":", 1)
+    except Exception:
+        await cb.answer("❌ Ошибка", show_alert=True)
+        return
+    offer = offers.get(offer_id)
+    if not offer:
+        await cb.answer("✅ Уже подтверждено", show_alert=True)
+        return
+    lang = offer.lang
+    offer.status = "completed"
+    log_offer(offer)
+    await cb.answer(text_sent_alert(lang), show_alert=True)
+    if ADMIN_ID:
+        try:
+            await bot.send_message(
+                ADMIN_ID,
+                f"✅ <b>Продажа завершена</b>\n\n"
+                f"Оффер: <code>{offer_id}</code>\n"
+                f"Подарок: {html.escape(offer.nft_title)}\n"
+                f"Цена: {offer.price} {offer.currency}\n"
+                f"Покупатель: {html.escape(offer.buyer_name)}"
+            )
+        except Exception:
+            pass
+    offers.pop(offer_id, None)
+
+
+# ---------- ВХОД / АДМИН ----------
 
 @router.callback_query(F.data == "entry:start")
 async def entry_start(cb: CallbackQuery, bot: Bot) -> None:
@@ -643,151 +819,12 @@ async def cmd_stats(message: Message, bot: Bot) -> None:
         f"📊 <b>Статистика</b>\n\n"
         f"Активных офферов: <b>{alive}</b>\n"
         f"Всего в памяти: <b>{len(offers)}</b>\n"
+        f"Триггеров в ожидании: <b>{len(pending_triggers)}</b>\n"
         f"Пользователей с доступом: <b>{len(load_allowed())}</b>"
     )
 
 
-@router.business_message(F.text)
-async def create_offer(message: Message, bot: Bot) -> None:
-    if not message.text or not message.business_connection_id:
-        return
-    match = COMMAND_REGEX.match(message.text.strip())
-    if not match:
-        return
-    uid = message.from_user.id if message.from_user else 0
-    if not await rate_limit(uid):
-        log.warning(f"rate limit: {uid}")
-        return
-    payload = match.group(1).strip()
-    lang = detect_lang(payload)
-    price = parse_price(payload)
-    if price is None:
-        await safe_send(
-            bot, text_price_error(lang),
-            message.chat.id, message.business_connection_id
-        )
-        return
-    gift_link = detect_gift(payload)
-    currency = detect_currency(payload)
-    try:
-        connection = await bot.get_business_connection(
-            business_connection_id=message.business_connection_id
-        )
-        buyer = connection.user
-        buyer_id = buyer.id
-        if not is_allowed(buyer_id):
-            await safe_send(
-                bot, text_no_access(lang),
-                message.chat.id, message.business_connection_id
-            )
-            return
-        buyer_name = f"@{buyer.username}" if buyer.username else buyer.full_name
-        buyer_username = buyer.username if buyer.username else str(buyer.id)
-        offer_id = secrets.token_urlsafe(8)
-        offer = Offer(
-            id=offer_id,
-            connection_id=message.business_connection_id,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            buyer_id=buyer_id,
-            buyer_name=buyer_name,
-            buyer_username=buyer_username,
-            price=price,
-            currency=currency,
-            lang=lang,
-            gift_link=gift_link,
-        )
-        sent = await safe_send(
-            bot, text_offer(offer),
-            message.chat.id, message.business_connection_id,
-            kb_offer(offer)
-        )
-        if not sent:
-            log.error(f"offer send failed {offer_id}")
-            return
-        offer.message_id = sent.message_id
-        offers[offer_id] = offer
-        log_offer(offer)
-        log.info(f"offer: {offer_id} | {price} {currency} | buyer={buyer_id}")
-        await safe_delete(bot, message.chat.id, message.message_id, message.business_connection_id)
-    except Exception as e:
-        log.exception(f"create_offer: {e}")
-        try:
-            await safe_send(
-                bot, text_error(lang, html.escape(str(e)[:100])),
-                message.chat.id, message.business_connection_id
-            )
-        except Exception:
-            pass
-
-
-@router.callback_query(F.data.startswith(("accept:", "decline:")))
-async def resolve_offer(cb: CallbackQuery, bot: Bot) -> None:
-    try:
-        action, offer_id = cb.data.split(":", 1)
-    except Exception:
-        await cb.answer("❌ Ошибка", show_alert=True)
-        return
-    offer = offers.get(offer_id)
-    if not offer:
-        await cb.answer("⚠️ Оффер не найден или истёк", show_alert=True)
-        return
-    if action == "decline":
-        offer.status = "declined"
-        log_offer(offer)
-        await safe_edit(
-            bot, text_declined(offer),
-            offer.connection_id, offer.message_id, None, offer.chat_id
-        )
-        offers.pop(offer_id, None)
-        await cb.answer(text_decline_alert(offer.lang))
-    else:
-        offer.status = "accepted"
-        log_offer(offer)
-        edited = await safe_edit(
-            bot, text_sold(offer),
-            offer.connection_id, offer.message_id,
-            kb_sold(offer), offer.chat_id
-        )
-        if not edited:
-            await safe_send(
-                bot, text_sold(offer),
-                offer.chat_id, offer.connection_id, kb_sold(offer)
-            )
-        alert = text_accept_alert(offer)
-        if len(alert) > 200:
-            alert = alert[:197] + "..."
-        await cb.answer(alert, show_alert=True)
-
-
-@router.callback_query(F.data.startswith("sent:"))
-async def confirm_sent(cb: CallbackQuery, bot: Bot) -> None:
-    try:
-        _, offer_id = cb.data.split(":", 1)
-    except Exception:
-        await cb.answer("❌ Ошибка", show_alert=True)
-        return
-    offer = offers.get(offer_id)
-    if not offer:
-        await cb.answer("✅ Уже подтверждено", show_alert=True)
-        return
-    lang = offer.lang
-    offer.status = "completed"
-    log_offer(offer)
-    await cb.answer(text_sent_alert(lang), show_alert=True)
-    if ADMIN_ID:
-        try:
-            await bot.send_message(
-                ADMIN_ID,
-                f"✅ <b>Продажа завершена</b>\n\n"
-                f"Оффер: <code>{offer_id}</code>\n"
-                f"Цена: {offer.price} {offer.currency}\n"
-                f"Покупатель: {html.escape(offer.buyer_name)}"
-            )
-        except Exception:
-            pass
-    offers.pop(offer_id, None)
-
+# ---------- ФОН ----------
 
 bot_global: Optional[Bot] = None
 
@@ -797,9 +834,10 @@ async def cleanup_offers() -> None:
         try:
             await asyncio.sleep(60)
             now = time.time()
+            # просрочка офферов
             expired = [
                 oid for oid, o in offers.items()
-                if now - o.created_at > TTL_HOURS * 3600
+                if now - o.created_at > TTL_HOURS * 3600 + TTL_MINUTES * 60
             ]
             for oid in expired:
                 offer = offers.pop(oid, None)
@@ -808,45 +846,3 @@ async def cleanup_offers() -> None:
                     log_offer(offer)
                     await safe_edit(
                         bot_global, text_expired(offer.lang),
-                        offer.connection_id, offer.message_id, None, offer.chat_id
-                    )
-            if expired:
-                log.info(f"expired: {len(expired)}")
-        except Exception as e:
-            log.error(f"cleanup: {e}")
-
-
-async def main() -> None:
-    global bot_global
-    log.info("Запуск Gift Offer Bot")
-    session = AiohttpSession(timeout=30)
-    bot_global = Bot(
-        TOKEN,
-        default=DefaultBotProperties(parse_mode="HTML"),
-        session=session
-    )
-    dp = Dispatcher()
-    dp.include_router(router)
-    asyncio.create_task(cleanup_offers())
-    try:
-        me = await bot_global.get_me()
-        log.info(f"bot: @{me.username} ({me.id})")
-        log.info(f"admin: {ADMIN_ID}")
-        log.info(f"access: {len(load_allowed())}")
-        log.info(f"ttl: {TTL_HOURS}h")
-        await dp.start_polling(
-            bot_global,
-            allowed_updates=["message", "callback_query", "business_message", "business_connection"]
-        )
-    finally:
-        await bot_global.session.close()
-        log.info("bot stopped")
-
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        log.info("interrupted")
-    except Exception as e:
-        log.exception(f"fatal: {e}")
