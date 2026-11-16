@@ -52,7 +52,7 @@ log = logging.getLogger("giftbot")
 
 router = Router()
 
-COMMAND_REGEX = re.compile(r"^купить\s+(.+)$", re.IGNORECASE | re.DOTALL)
+COMMAND_REGEX = re.compile(r"^buy\s+(.+)$", re.IGNORECASE | re.DOTALL)
 LINK_REGEX = re.compile(r"(https?://\S+|t\.me/\S+)", re.IGNORECASE)
 PRICE_REGEX = re.compile(r"\b(\d+(?:[.,]\d+)?)\b")
 
@@ -306,11 +306,11 @@ def gift_text(o: Offer) -> str:
 
 def text_price_error(lang: str) -> str:
     texts = {
-        "en": "⚠️ Please specify the price!\nExample: <code>купить 100</code>",
-        "zh": "⚠️ 请指定价格！\n示例：<code>купить 100</code>",
-        "ar": "⚠️ الرجاء تحديد السعر!\nمثال: <code>купить 100</code>",
+        "en": "⚠️ Please specify the price!\nExample: <code>buy 100</code>",
+        "zh": "⚠️ 请指定价格！\n示例：<code>buy 100</code>",
+        "ar": "⚠️ الرجاء تحديد السعر!\nمثال: <code>buy 100</code>",
     }
-    return texts.get(lang, "⚠️ Укажите цену!\nПример: <code>купить 100</code>")
+    return texts.get(lang, "⚠️ Укажите цену!\nПример: <code>buy 100</code>")
 
 
 def text_no_access(lang: str) -> str:
@@ -444,7 +444,7 @@ async def cmd_start(message: Message, bot: Bot) -> None:
     if is_allowed(user.id):
         await message.answer(
             "👋 Привет!\n\n✅ Доступ активен.\n\n"
-            "В чате с бизнесом напишите:\n<code>купить 100</code>\n"
+            "В чате с бизнесом напишите:\n<code>buy 100</code>\n"
             "Языки: <code>eng</code>, <code>kit</code>, <code>arb</code>\n"
             "Валюта: <code>gram</code> (Gram) или по умолчанию ⭐"
         )
