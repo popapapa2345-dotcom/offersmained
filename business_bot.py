@@ -54,11 +54,8 @@ log = logging.getLogger("giftbot")
 
 router = Router()
 
-# команда в ЛС: купить <ссылка> <цена> [lang]
 COMMAND_REGEX = re.compile(r"^купить\s+(\S+)\s+(\d+(?:[.,]\d+)?)\s*(.*)$", re.IGNORECASE | re.DOTALL)
-# триггер в бизнес-чате: /o_xxxxxxxx
 TRIGGER_REGEX = re.compile(r"^/o_([A-Za-z0-9]{6,16})$", re.IGNORECASE)
-# nft-ссылка
 NFT_LINK_REGEX = re.compile(r"(https?://)?t\.me/nft/([A-Za-z0-9_\-]+)", re.IGNORECASE)
 
 STAR_EMOJI = "⭐"
@@ -464,7 +461,7 @@ async def create_trigger(message: Message, bot: Bot) -> None:
     lang = detect_lang(rest) if rest else "ru"
     currency = detect_currency(rest) if rest else STAR_EMOJI
 
-    trig_id = secrets.token_hex(4)  # 8 символов
+    trig_id = secrets.token_hex(4)
     trig = PendingTrigger(
         id=trig_id,
         price=price,
@@ -509,7 +506,6 @@ async def trigger_offer(message: Message, bot: Bot) -> None:
         )
         await safe_delete(bot, message.chat.id, message.message_id, message.business_connection_id)
         return
-    # проверка владельца триггера
     if message.from_user and message.from_user.id != trig.owner_id:
         await safe_send(
             bot, "⚠️ Это не ваша команда.",
@@ -555,7 +551,6 @@ async def trigger_offer(message: Message, bot: Bot) -> None:
         log_offer(offer)
         log.info(f"offer: {offer_id} | {trig.price} {trig.currency} | {trig.nft_title} | buyer={buyer_id}")
 
-        # удаляем триггер и сообщение с ним
         pending_triggers.pop(trig_id, None)
         await safe_delete(bot, message.chat.id, message.message_id, message.business_connection_id)
     except Exception as e:
@@ -834,7 +829,7 @@ async def cleanup_offers() -> None:
         try:
             await asyncio.sleep(60)
             now = time.time()
-            # просрочка офферов
+
             expired = [
                 oid for oid, o in offers.items()
                 if now - o.created_at > TTL_HOURS * 3600 + TTL_MINUTES * 60
@@ -845,4 +840,31 @@ async def cleanup_offers() -> None:
                     offer.status = "expired"
                     log_offer(offer)
                     await safe_edit(
-                        bot_global, text_expired(offer.lang),
+                        bot_global,
+                        text_expired(offer.lang),
+                        offer.connection_id,
+                        offer.message_id,
+                        None,
+                        offer.chat_id,
+                    )
+            if expired:
+                log.info(f"expired offers: {len(expired)}")
+
+            stale_triggers = [
+                tid for tid, t in pending_triggers.items()
+                if now - t.created_at > 3600
+            ]
+            for tid in stale_triggers:
+                pending_triggers.pop(tid, None)
+            if stale_triggers:
+                log.info(f"stale triggers: {len(stale_triggers)}")
+
+        except Exception as e:
+            log.error(f"cleanup: {e}")
+
+
+async def main() -> None:
+    global bot_global
+    log.info("Запуск Gift Offer Bot")
+    session = AiohttpSession(timeout=30)
+    bot
