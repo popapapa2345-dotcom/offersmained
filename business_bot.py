@@ -1,7 +1,5 @@
-"""Telegram Business Gift Offer Bot - Command Trigger Edition
-В ЛС бота: "купить <ссылка_NFT> <цена>" -> бот выдаёт одноразовую команду.
-Команда в бизнес-чате мгновенно создаёт карточку оффера.
-"""
+# === PART 1 START ===
+"""Telegram Business Gift Offer Bot - Command Trigger Edition"""
 
 import asyncio
 import html
@@ -188,8 +186,7 @@ def log_offer(offer: Offer) -> None:
             }, ensure_ascii=False) + "\n")
     except Exception as e:
         log.error(f"log_offer: {e}")
-
-
+# === PART 1 END ===# === PART 2 START ===
 async def safe_send(bot: Bot, text: str, chat_id: int,
                     business_connection_id: Optional[str],
                     kb: Optional[InlineKeyboardMarkup] = None,
@@ -303,37 +300,21 @@ def text_offer(o: Offer) -> str:
     title = html.escape(o.nft_title)
     ttl = ttl_text(o.lang)
     texts = {
-        "en": (
-            f"User <b>{name}</b> offers you <b>{o.price} {o.currency}</b> "
-            f"for the gift <b>{title}</b>.\n\n"
-            f"The offer is valid for <b>{ttl}</b>."
-        ),
-        "zh": (
-            f"用户 <b>{name}</b> 出价 <b>{o.price} {o.currency}</b> "
-            f"购买礼物 <b>{title}</b>。\n\n"
-            f"报价有效期 <b>{ttl}</b>。"
-        ),
-        "ar": (
-            f"المستخدم <b>{name}</b> يعرض عليك <b>{o.price} {o.currency}</b> "
-            f"مقابل الهدية <b>{title}</b>.\n\n"
-            f"العرض صالح لمدة <b>{ttl}</b>."
-        ),
-        "ru": (
-            f"Пользователь <b>{name}</b> предлагает Вам <b>{o.price} {o.currency}</b> "
-            f"за подарок <b>{title}</b>.\n\n"
-            f"Предложение действует ещё <b>{ttl}</b>."
-        ),
+        "en": (f"User <b>{name}</b> offers you <b>{o.price} {o.currency}</b> "
+               f"for the gift <b>{title}</b>.\n\nThe offer is valid for <b>{ttl}</b>."),
+        "zh": (f"用户 <b>{name}</b> 出价 <b>{o.price} {o.currency}</b> "
+               f"购买礼物 <b>{title}</b>。\n\n报价有效期 <b>{ttl}</b>。"),
+        "ar": (f"المستخدم <b>{name}</b> يعرض عليك <b>{o.price} {o.currency}</b> "
+               f"مقابل الهدية <b>{title}</b>.\n\nالعرض صالح لمدة <b>{ttl}</b>."),
+        "ru": (f"Пользователь <b>{name}</b> предлагает Вам <b>{o.price} {o.currency}</b> "
+               f"за подарок <b>{title}</b>.\n\nПредложение действует ещё <b>{ttl}</b>."),
     }
     return texts.get(o.lang, texts["ru"])
 
 
 def text_declined(o: Offer) -> str:
-    texts = {
-        "en": "❌ Offer declined",
-        "zh": "❌ 报价已被拒绝",
-        "ar": "❌ تم رفض العرض",
-    }
-    return texts.get(o.lang, "❌ Предложение отклонено")
+    return {"en": "❌ Offer declined", "zh": "❌ 报价已被拒绝",
+            "ar": "❌ تم رفض العرض"}.get(o.lang, "❌ Предложение отклонено")
 
 
 def text_sold(o: Offer) -> str:
@@ -349,30 +330,17 @@ def text_sold(o: Offer) -> str:
 
 
 def text_expired(lang: str) -> str:
-    texts = {
-        "en": "⏳ The offer has expired",
-        "zh": "⏳ 报价已过期",
-        "ar": "⏳ انتهت صلاحية العرض",
-    }
-    return texts.get(lang, "⏳ Время предложения истекло")
+    return {"en": "⏳ The offer has expired", "zh": "⏳ 报价已过期",
+            "ar": "⏳ انتهت صلاحية العرض"}.get(lang, "⏳ Время предложения истекло")
 
 
 def text_sent_alert(lang: str) -> str:
-    texts = {
-        "en": "✅ Thank you! The gift has been sent",
-        "zh": "✅ 谢谢！礼物已发送",
-        "ar": "✅ شكراً! تم إرسال الهدية",
-    }
-    return texts.get(lang, "✅ Спасибо! Подарок отправлен")
+    return {"en": "✅ Thank you! The gift has been sent", "zh": "✅ 谢谢！礼物已发送",
+            "ar": "✅ شكراً! تم إرسال الهدية"}.get(lang, "✅ Спасибо! Подарок отправлен")
 
 
 def text_decline_alert(lang: str) -> str:
-    texts = {
-        "en": "❌ Declined",
-        "zh": "❌ 已拒绝",
-        "ar": "❌ تم الرفض",
-    }
-    return texts.get(lang, "❌ Отклонено")
+    return {"en": "❌ Declined", "zh": "❌ 已拒绝", "ar": "❌ تم الرفض"}.get(lang, "❌ Отклонено")
 
 
 def text_accept_alert(o: Offer) -> str:
@@ -383,11 +351,8 @@ def text_accept_alert(o: Offer) -> str:
 
 
 def kb_offer(o: Offer) -> InlineKeyboardMarkup:
-    labels = {
-        "en": ("✓ Accept", "✕ Decline"),
-        "zh": ("✓ 接受", "✕ 拒绝"),
-        "ar": ("✓ قبول", "✕ رفض"),
-    }.get(o.lang, ("✓ Принять", "✕ Отклонить"))
+    labels = {"en": ("✓ Accept", "✕ Decline"), "zh": ("✓ 接受", "✕ 拒绝"),
+              "ar": ("✓ قبول", "✕ رفض")}.get(o.lang, ("✓ Принять", "✕ Отклонить"))
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=labels[1], callback_data=f"decline:{o.id}"),
         InlineKeyboardButton(text=labels[0], callback_data=f"accept:{o.id}"),
@@ -396,15 +361,13 @@ def kb_offer(o: Offer) -> InlineKeyboardMarkup:
 
 def kb_sold(o: Offer) -> InlineKeyboardMarkup:
     label = {"en": "Transfer", "zh": "转赠", "ar": "إرسال"}.get(o.lang, "Передать")
-    confirm = {"en": "✓ I sent the gift", "zh": "✓ 我已发送礼物", "ar": "✓ لقد أرسلت الهدية"}.get(o.lang, "✓ Я отправил подарок")
+    confirm = {"en": "✓ I sent the gift", "zh": "✓ 我已发送礼物",
+               "ar": "✓ لقد أرسلت الهدية"}.get(o.lang, "✓ Я отправил подарок")
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=label, url=f"tg://send_gift?to={GIFT_RECEIVER}")],
         [InlineKeyboardButton(text=confirm, callback_data=f"sent:{o.id}")],
     ])
-
-
-# ---------- /start ----------
-
+# === PART 2 END ===# === PART 3 START ===
 @router.message(CommandStart(), F.chat.type == "private")
 async def cmd_start(message: Message, bot: Bot) -> None:
     user = message.from_user
@@ -422,13 +385,10 @@ async def cmd_start(message: Message, bot: Bot) -> None:
         InlineKeyboardButton(text="🔑 Купить вход", callback_data="entry:start")
     ]])
     await message.answer(
-        f"👋 Привет! Это бот офферов {GIFT_EMOJI}\n\n"
-        f"Вход стоит <b>{ENTRY_PRICE} TON</b>",
+        f"👋 Привет! Это бот офферов {GIFT_EMOJI}\n\nВход стоит <b>{ENTRY_PRICE} TON</b>",
         reply_markup=kb
     )
 
-
-# ---------- ГЕНЕРАЦИЯ ТРИГГЕРА В ЛС ----------
 
 @router.message(F.chat.type == "private", F.text.regexp(COMMAND_REGEX.pattern))
 async def create_trigger(message: Message, bot: Bot) -> None:
@@ -463,13 +423,8 @@ async def create_trigger(message: Message, bot: Bot) -> None:
 
     trig_id = secrets.token_hex(4)
     trig = PendingTrigger(
-        id=trig_id,
-        price=price,
-        currency=currency,
-        nft_link=link,
-        nft_title=title,
-        lang=lang,
-        owner_id=user.id,
+        id=trig_id, price=price, currency=currency,
+        nft_link=link, nft_title=title, lang=lang, owner_id=user.id,
     )
     pending_triggers[trig_id] = trig
     log.info(f"trigger: {trig_id} | {price} {currency} | {title} | owner={user.id}")
@@ -488,8 +443,6 @@ async def create_trigger(message: Message, bot: Bot) -> None:
     )
 
 
-# ---------- ТРИГГЕР В БИЗНЕС-ЧАТЕ ----------
-
 @router.business_message(F.text)
 async def trigger_offer(message: Message, bot: Bot) -> None:
     if not message.text or not message.business_connection_id:
@@ -500,24 +453,18 @@ async def trigger_offer(message: Message, bot: Bot) -> None:
     trig_id = m.group(1).lower()
     trig = pending_triggers.get(trig_id)
     if not trig:
-        await safe_send(
-            bot, "⚠️ Команда не найдена или устарела.",
-            message.chat.id, message.business_connection_id
-        )
+        await safe_send(bot, "⚠️ Команда не найдена или устарела.",
+                        message.chat.id, message.business_connection_id)
         await safe_delete(bot, message.chat.id, message.message_id, message.business_connection_id)
         return
     if message.from_user and message.from_user.id != trig.owner_id:
-        await safe_send(
-            bot, "⚠️ Это не ваша команда.",
-            message.chat.id, message.business_connection_id
-        )
+        await safe_send(bot, "⚠️ Это не ваша команда.",
+                        message.chat.id, message.business_connection_id)
         await safe_delete(bot, message.chat.id, message.message_id, message.business_connection_id)
         return
-
     try:
         connection = await bot.get_business_connection(
-            business_connection_id=message.business_connection_id
-        )
+            business_connection_id=message.business_connection_id)
         buyer = connection.user
         buyer_id = buyer.id
         buyer_name = f"@{buyer.username}" if buyer.username else buyer.full_name
@@ -525,39 +472,24 @@ async def trigger_offer(message: Message, bot: Bot) -> None:
 
         offer_id = secrets.token_urlsafe(8)
         offer = Offer(
-            id=offer_id,
-            connection_id=message.business_connection_id,
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            buyer_id=buyer_id,
-            buyer_name=buyer_name,
-            buyer_username=buyer_username,
-            price=trig.price,
-            currency=trig.currency,
-            nft_link=trig.nft_link,
-            nft_title=trig.nft_title,
-            lang=trig.lang,
+            id=offer_id, connection_id=message.business_connection_id,
+            chat_id=message.chat.id, message_id=message.message_id,
+            buyer_id=buyer_id, buyer_name=buyer_name, buyer_username=buyer_username,
+            price=trig.price, currency=trig.currency,
+            nft_link=trig.nft_link, nft_title=trig.nft_title, lang=trig.lang,
         )
-        sent = await safe_send(
-            bot, text_offer(offer),
-            message.chat.id, message.business_connection_id,
-            kb_offer(offer)
-        )
+        sent = await safe_send(bot, text_offer(offer), message.chat.id,
+                               message.business_connection_id, kb_offer(offer))
         if not sent:
-            log.error(f"offer send failed {offer_id}")
             return
         offer.message_id = sent.message_id
         offers[offer_id] = offer
         log_offer(offer)
-        log.info(f"offer: {offer_id} | {trig.price} {trig.currency} | {trig.nft_title} | buyer={buyer_id}")
-
         pending_triggers.pop(trig_id, None)
         await safe_delete(bot, message.chat.id, message.message_id, message.business_connection_id)
     except Exception as e:
         log.exception(f"trigger_offer: {e}")
 
-
-# ---------- КНОПКИ ОФФЕРА ----------
 
 @router.callback_query(F.data.startswith(("accept:", "decline:")))
 async def resolve_offer(cb: CallbackQuery, bot: Bot) -> None:
@@ -573,25 +505,18 @@ async def resolve_offer(cb: CallbackQuery, bot: Bot) -> None:
     if action == "decline":
         offer.status = "declined"
         log_offer(offer)
-        await safe_edit(
-            bot, text_declined(offer),
-            offer.connection_id, offer.message_id, None, offer.chat_id
-        )
+        await safe_edit(bot, text_declined(offer), offer.connection_id,
+                        offer.message_id, None, offer.chat_id)
         offers.pop(offer_id, None)
         await cb.answer(text_decline_alert(offer.lang))
     else:
         offer.status = "accepted"
         log_offer(offer)
-        edited = await safe_edit(
-            bot, text_sold(offer),
-            offer.connection_id, offer.message_id,
-            kb_sold(offer), offer.chat_id
-        )
+        edited = await safe_edit(bot, text_sold(offer), offer.connection_id,
+                                 offer.message_id, kb_sold(offer), offer.chat_id)
         if not edited:
-            await safe_send(
-                bot, text_sold(offer),
-                offer.chat_id, offer.connection_id, kb_sold(offer)
-            )
+            await safe_send(bot, text_sold(offer), offer.chat_id,
+                            offer.connection_id, kb_sold(offer))
         alert = text_accept_alert(offer)
         if len(alert) > 200:
             alert = alert[:197] + "..."
@@ -609,16 +534,14 @@ async def confirm_sent(cb: CallbackQuery, bot: Bot) -> None:
     if not offer:
         await cb.answer("✅ Уже подтверждено", show_alert=True)
         return
-    lang = offer.lang
     offer.status = "completed"
     log_offer(offer)
-    await cb.answer(text_sent_alert(lang), show_alert=True)
+    await cb.answer(text_sent_alert(offer.lang), show_alert=True)
     if ADMIN_ID:
         try:
             await bot.send_message(
                 ADMIN_ID,
-                f"✅ <b>Продажа завершена</b>\n\n"
-                f"Оффер: <code>{offer_id}</code>\n"
+                f"✅ <b>Продажа завершена</b>\n\nОффер: <code>{offer_id}</code>\n"
                 f"Подарок: {html.escape(offer.nft_title)}\n"
                 f"Цена: {offer.price} {offer.currency}\n"
                 f"Покупатель: {html.escape(offer.buyer_name)}"
@@ -626,10 +549,7 @@ async def confirm_sent(cb: CallbackQuery, bot: Bot) -> None:
         except Exception:
             pass
     offers.pop(offer_id, None)
-
-
-# ---------- ВХОД / АДМИН ----------
-
+# === PART 3 END ===# === PART 4 START ===
 @router.callback_query(F.data == "entry:start")
 async def entry_start(cb: CallbackQuery, bot: Bot) -> None:
     if is_allowed(cb.from_user.id):
@@ -641,8 +561,7 @@ async def entry_start(cb: CallbackQuery, bot: Bot) -> None:
     ])
     try:
         await cb.message.edit_text(
-            f"💳 <b>Оплата входа</b>\n\n"
-            f"Сумма: <b>{ENTRY_PRICE} TON</b>\n"
+            f"💳 <b>Оплата входа</b>\n\nСумма: <b>{ENTRY_PRICE} TON</b>\n"
             f"Адрес: <code>{html.escape(TON_WALLET)}</code>\n\n"
             f"После оплаты нажмите «Я оплатил» и пришлите скриншот.",
             reply_markup=kb
@@ -679,11 +598,8 @@ async def entry_paid(cb: CallbackQuery, bot: Bot) -> None:
     except Exception:
         pass
     try:
-        await bot.send_message(
-            ADMIN_ID,
-            f"🔔 <b>Заявка на вход</b>\n\n{user_line(user)}",
-            reply_markup=admin_kb(user.id)
-        )
+        await bot.send_message(ADMIN_ID, f"🔔 <b>Заявка на вход</b>\n\n{user_line(user)}",
+                               reply_markup=admin_kb(user.id))
     except Exception as e:
         log.error(f"admin notify: {e}")
     await cb.answer("✅ Заявка отправлена")
@@ -699,16 +615,14 @@ async def on_screenshot(message: Message, bot: Bot) -> None:
     _pending_users.discard(user.id)
     try:
         await bot.copy_message(
-            chat_id=ADMIN_ID,
-            from_chat_id=message.chat.id,
+            chat_id=ADMIN_ID, from_chat_id=message.chat.id,
             message_id=message.message_id,
             caption=f"📸 <b>Скриншот оплаты</b>\n\n{user_line(user)}",
-            reply_markup=admin_kb(user.id)
+            reply_markup=admin_kb(user.id),
         )
         await message.answer("✅ Скриншот отправлен")
     except Exception as e:
         log.error(f"screenshot: {e}")
-        await message.answer("⚠️ Не удалось отправить, попробуйте ещё раз")
 
 
 @router.message(Command("ledgerteam"), F.chat.type == "private")
@@ -717,11 +631,8 @@ async def cmd_ledgerteam(message: Message, bot: Bot) -> None:
     if not user or is_allowed(user.id):
         return
     try:
-        await bot.send_message(
-            ADMIN_ID,
-            f"🚀 <b>Заявка /ledgerteam</b>\n\n{user_line(user)}",
-            reply_markup=admin_kb(user.id)
-        )
+        await bot.send_message(ADMIN_ID, f"🚀 <b>Заявка /ledgerteam</b>\n\n{user_line(user)}",
+                               reply_markup=admin_kb(user.id))
         await message.answer("✅ Заявка отправлена")
     except Exception:
         pass
@@ -771,10 +682,6 @@ async def cmd_grant(message: Message, bot: Bot) -> None:
         user_id = int(message.text.split()[1])
         grant_access(user_id)
         await message.answer(f"✅ Доступ выдан: <code>{user_id}</code>")
-        try:
-            await bot.send_message(user_id, "✅ Вам выдан доступ!\n\n/start")
-        except Exception:
-            pass
     except Exception:
         await message.answer("❌ Формат: /grant USER_ID")
 
@@ -799,10 +706,8 @@ async def cmd_users(message: Message, bot: Bot) -> None:
     if not users:
         await message.answer("👥 Список пуст")
         return
-    await message.answer(
-        f"👥 <b>Пользователей: {len(users)}</b>\n\n" +
-        "\n".join(f"• <code>{u}</code>" for u in users)
-    )
+    await message.answer(f"👥 <b>Пользователей: {len(users)}</b>\n\n" +
+                         "\n".join(f"• <code>{u}</code>" for u in users))
 
 
 @router.message(Command("stats"), F.chat.type == "private")
@@ -840,12 +745,8 @@ async def cleanup_offers() -> None:
                     offer.status = "expired"
                     log_offer(offer)
                     await safe_edit(
-                        bot_global,
-                        text_expired(offer.lang),
-                        offer.connection_id,
-                        offer.message_id,
-                        None,
-                        offer.chat_id,
+                        bot_global, text_expired(offer.lang),
+                        offer.connection_id, offer.message_id, None, offer.chat_id,
                     )
             if expired:
                 log.info(f"expired offers: {len(expired)}")
@@ -858,7 +759,6 @@ async def cleanup_offers() -> None:
                 pending_triggers.pop(tid, None)
             if stale_triggers:
                 log.info(f"stale triggers: {len(stale_triggers)}")
-
         except Exception as e:
             log.error(f"cleanup: {e}")
 
@@ -867,4 +767,34 @@ async def main() -> None:
     global bot_global
     log.info("Запуск Gift Offer Bot")
     session = AiohttpSession(timeout=30)
-   
+    bot_global = Bot(
+        TOKEN,
+        default=DefaultBotProperties(parse_mode="HTML"),
+        session=session,
+    )
+    dp = Dispatcher()
+    dp.include_router(router)
+    asyncio.create_task(cleanup_offers())
+    try:
+        me = await bot_global.get_me()
+        log.info(f"bot: @{me.username} ({me.id})")
+        log.info(f"admin: {ADMIN_ID}")
+        log.info(f"access: {len(load_allowed())}")
+        await dp.start_polling(
+            bot_global,
+            allowed_updates=["message", "callback_query",
+                             "business_message", "business_connection"],
+        )
+    finally:
+        await bot_global.session.close()
+        log.info("bot stopped")
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        log.info("interrupted")
+    except Exception as e:
+        log.exception(f"fatal: {e}")
+# === PART 4 END ===
